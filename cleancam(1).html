@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>CleanCam</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000;
+    width: 100vw;
+    height: 100dvh;
+    overflow: hidden;
+    font-family: -apple-system, sans-serif;
+    touch-action: none;
+    user-select: none;
+  }
+  #main-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  #video {
+    position: fixed;
+    visibility: hidden;
+    width: 1px;
+    height: 1px;
+  }
+  #hud {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+  }
+  #header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 52px 18px 14px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.65), transparent);
+    pointer-events: all;
+  }
+  #logo { font-size: 24px; font-weight: 800; color: #fff; letter-spacing: -1px; }
+  #logo span { color: #22ff88; }
+  .pill {
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 30px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .dot-pulse {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #22ff88;
+    animation: blink 1.8s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  #footer {
+    margin-top: auto;
+    padding: 0 14px 36px;
+    background: linear-gradient(to top, rgba(0,0,0,0.6), transparent);
+  }
+  #bar-wrap {
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 20px;
+    padding: 12px 16px;
+  }
+  #bar-top {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.65);
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+  }
+  #pct { color: #22ff88; font-size: 16px; font-weight: 800; }
+  #bar-track { height: 7px; background: rgba(255,255,255,0.12); border-radius: 10px; overflow: hidden; }
+  #bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #00bb55, #22ff88); border-radius: 10px; transition: width 0.4s ease; }
+  #btns {
+    position: fixed; right: 16px; bottom: 130px;
+    display: flex; flex-direction: column; gap: 10px; z-index: 20;
+  }
+  .icon-btn {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.18);
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; color: #fff;
+  }
+  #start-screen {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.92);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 100; padding: 40px; text-align: center;
+  }
+  #start-screen h1 {
+    font-size: 52px; font-weight: 900; color: #fff;
+    letter-spacing: -2px; line-height: 1; margin-bottom: 6px;
+  }
+  #start-screen h1 span { color: #22ff88; }
+  #start-screen p {
+    font-size: 16px; color: rgba(255,255,255,0.55);
+    line-height: 1.6; max-width: 270px; margin-bottom: 44px;
+  }
+  #start-btn {
+    background: #22ff88; color: #000;
+    font-size: 18px; font-weight: 800;
+    border: none; border-radius: 20px;
+    padding: 18px 52px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #done-msg {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 50; pointer-events: none;
+    opacity: 0; transition: opacity 0.5s;
+  }
+  #done-msg.show { opacity: 1; }
+  #done-inner {
+    background: rgba(0,0,0,0.82);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border: 2px solid #22ff88; border-radius: 28px;
+    padding: 32px 44px; text-align: center;
+  }
+  #done-inner h2 { font-size: 36px; font-weight: 900; color: #22ff88; }
+  #done-inner p { font-size: 15px; color: rgba(255,255,255,0.6); margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<video id="video" autoplay playsinline muted></video>
+<canvas id="main-canvas"></canvas>
+
+<div id="hud">
+  <div id="header">
+    <div id="logo">Clean<span>Cam</span></div>
+    <div class="pill"><div class="dot-pulse"></div><span id="left-count">0 spots left</span></div>
+  </div>
+  <div id="footer">
+    <div id="bar-wrap">
+      <div id="bar-top"><span>Floor cleaned</span><span id="pct">0%</span></div>
+      <div id="bar-track"><div id="bar-fill"></div></div>
+    </div>
+  </div>
+</div>
+
+<div id="btns">
+  <div class="icon-btn" id="sens-btn">⚙️</div>
+  <div class="icon-btn" id="reset-btn">🔄</div>
+</div>
+
+<div id="done-msg">
+  <div id="done-inner"><h2>✅ All Clean!</h2><p>Great job! Every spot covered.</p></div>
+</div>
+
+<div id="start-screen">
+  <h1>Clean<span>Cam</span></h1>
+  <p>Mount your phone on your vacuum pointing at the floor. Green spots appear ON the floor — vacuum over them to clear them!</p>
+  <button id="start-btn">Start Cleaning 🫧</button>
+</div>
+
+<script>
+const video = document.getElementById('video');
+const canvas = document.getElementById('main-canvas');
+const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+let W, H;
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', () => { resize(); buildGrid(); });
+
+// ── Spots ────────────────────────────────────────────────────────────────────
+const COLS = 7, ROWS = 12;
+let spots = [];
+let totalSpots = 0, clearedSpots = 0;
+let sensitivity = 35;
+let showDone = false;
+
+function buildGrid() {
+  spots = [];
+  clearedSpots = 0;
+  showDone = false;
+  document.getElementById('done-msg').classList.remove('show');
+
+  const cw = W / COLS, ch = H / ROWS;
+
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      if (Math.random() < 0.18) continue;
+      const jx = (Math.random() - 0.5) * cw * 0.55;
+      const jy = (Math.random() - 0.5) * ch * 0.55;
+      const cx = col * cw + cw / 2 + jx;
+      const cy = row * ch + ch / 2 + jy;
+
+      // Perspective scale: smaller near top (far), bigger near bottom (close)
+      const t = cy / H;
+      const r = 9 + 17 * t;
+
+      spots.push({ col, row, x: cx, y: cy, r, alive: true, popAnim: null, seed: Math.random() * 100 });
+    }
+  }
+  totalSpots = spots.length;
+  updateHUD();
+}
+
+// ── Motion detection ─────────────────────────────────────────────────────────
+let prevData = null;
+const mCanvas = document.createElement('canvas');
+const mCtx = mCanvas.getContext('2d', { willReadFrequently: true });
+
+function detectMotion() {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return;
+
+  const mw = 140, mh = Math.round(140 * vh / vw);
+  mCanvas.width = mw; mCanvas.height = mh;
+
+  mCtx.save();
+  if (isFront) { mCtx.scale(-1, 1); mCtx.drawImage(video, -mw, 0, mw, mh); }
+  else { mCtx.drawImage(video, 0, 0, mw, mh); }
+  mCtx.restore();
+
+  const cur = mCtx.getImageData(0, 0, mw, mh).data;
+
+  if (prevData) {
+    const motionGrid = new Float32Array(COLS * ROWS);
+    const pw = mw / COLS, ph = mh / ROWS;
+
+    for (let i = 0; i < cur.length; i += 4) {
+      const pi = i >> 2;
+      const px = pi % mw, py = pi / mw | 0;
+      const diff = Math.abs(cur[i] - prevData[i]) + Math.abs(cur[i+1] - prevData[i+1]) + Math.abs(cur[i+2] - prevData[i+2]);
+      const col = Math.min(COLS - 1, px / pw | 0);
+      const row = Math.min(ROWS - 1, py / ph | 0);
+      motionGrid[row * COLS + col] += diff;
+    }
+
+    const threshold = sensitivity * 450;
+    const now = performance.now();
+
+    spots.forEach(s => {
+      if (!s.alive || s.popAnim) return;
+      if (motionGrid[s.row * COLS + s.col] > threshold) {
+        s.popAnim = { start: now };
+        s.alive = false;
+        clearedSpots++;
+        updateHUD();
+      }
+    });
+  }
+
+  prevData = cur;
+}
+
+function updateHUD() {
+  const alive = totalSpots - clearedSpots;
+  document.getElementById('left-count').textContent = alive + ' spots left';
+  const pct = totalSpots ? Math.round(clearedSpots / totalSpots * 100) : 0;
+  document.getElementById('pct').textContent = pct + '%';
+  document.getElementById('bar-fill').style.width = pct + '%';
+  if (pct === 100 && !showDone) {
+    showDone = true;
+    setTimeout(() => document.getElementById('done-msg').classList.add('show'), 300);
+  }
+}
+
+// ── Draw a single floor disc ─────────────────────────────────────────────────
+function drawDisc(x, y, r, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y);
+
+  // Squish to look like it's flat on the floor
+  ctx.scale(1, 0.38);
+
+  // Soft outer glow
+  const glow = ctx.createRadialGradient(0, 0, r * 0.5, 0, 0, r * 2.2);
+  glow.addColorStop(0, 'rgba(34,255,136,0.22)');
+  glow.addColorStop(1, 'rgba(0,255,100,0)');
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 2.2, 0, Math.PI * 2);
+  ctx.fillStyle = glow;
+  ctx.fill();
+
+  // Main fill
+  const fill = ctx.createRadialGradient(-r * 0.2, -r * 0.2, r * 0.05, 0, 0, r);
+  fill.addColorStop(0, 'rgba(190,255,220,0.92)');
+  fill.addColorStop(0.55, 'rgba(34,255,136,0.78)');
+  fill.addColorStop(1, 'rgba(0,160,70,0.6)');
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+
+  // Rim
+  ctx.strokeStyle = 'rgba(220,255,235,0.75)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // Specular sheen
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.25, -r * 0.3, r * 0.28, r * 0.14, -0.6, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// ── Main loop ────────────────────────────────────────────────────────────────
+let lastMotionT = 0, running = false, isFront = false;
+
+function loop(now) {
+  if (!running) return;
+  requestAnimationFrame(loop);
+
+  // Camera feed
+  ctx.save();
+  if (isFront) { ctx.scale(-1, 1); ctx.drawImage(video, -W, 0, W, H); }
+  else { ctx.drawImage(video, 0, 0, W, H); }
+  ctx.restore();
+
+  // Draw spots
+  spots.forEach(s => {
+    if (s.popAnim) {
+      const p = Math.min(1, (now - s.popAnim.start) / 350);
+      const scale = 1 + p * 1.4;
+      const alpha = (1 - p) * 0.85;
+      if (p < 1) drawDisc(s.x, s.y, s.r * scale, alpha);
+      return;
+    }
+    if (!s.alive) return;
+
+    // Subtle pulse
+    const pulse = 1 + 0.06 * Math.sin(now * 0.002 + s.seed);
+    drawDisc(s.x, s.y, s.r * pulse, 0.82);
+  });
+
+  // Motion check every 110ms
+  if (now - lastMotionT > 110) {
+    detectMotion();
+    lastMotionT = now;
+  }
+}
+
+// ── Camera start ─────────────────────────────────────────────────────────────
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    const settings = stream.getVideoTracks()[0].getSettings();
+    isFront = settings.facingMode === 'user';
+    video.srcObject = stream;
+    await video.play();
+    running = true;
+    buildGrid();
+    requestAnimationFrame(loop);
+    document.getElementById('start-screen').style.display = 'none';
+  } catch (err) {
+    alert('Please allow camera access and try again.\n\n' + err.message);
+  }
+}
+
+// ── Controls ─────────────────────────────────────────────────────────────────
+document.getElementById('start-btn').addEventListener('click', startCamera);
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+  prevData = null;
+  buildGrid();
+});
+
+let sensPanel = null;
+document.getElementById('sens-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  if (sensPanel) { sensPanel.remove(); sensPanel = null; return; }
+  sensPanel = document.createElement('div');
+  sensPanel.style.cssText = 'position:fixed;right:16px;bottom:242px;z-index:30;background:rgba(0,0,0,0.78);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.2);border-radius:16px;padding:16px 18px;min-width:190px;';
+  sensPanel.innerHTML = `<div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px">Sensitivity</div><input type="range" id="sr" min="10" max="70" value="${sensitivity}" style="width:100%;accent-color:#22ff88"><div id="sv" style="font-size:13px;color:#22ff88;font-weight:700;text-align:right;margin-top:6px">${sensLabel(sensitivity)}</div>`;
+  document.body.appendChild(sensPanel);
+  document.getElementById('sr').addEventListener('input', e => {
+    sensitivity = +e.target.value;
+    document.getElementById('sv').textContent = sensLabel(sensitivity);
+  });
+});
+
+document.addEventListener('click', () => { if (sensPanel) { sensPanel.remove(); sensPanel = null; } });
+
+function sensLabel(v) { return v < 28 ? 'Low' : v < 52 ? 'Medium' : 'High'; }
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) running = false;
+  else if (video.srcObject) { running = true; requestAnimationFrame(loop); }
+});
+</script>
+</body>
+</html>
